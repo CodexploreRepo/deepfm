@@ -1,0 +1,43 @@
+[project]
+name = "deepfm"
+version = "0.1.0"
+description = "Production-grade DeepFM and variants for CTR prediction"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "pyyaml>=6.0",
+    "dacite>=1.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+]
+
+[project.scripts]
+deepfm = "deepfm.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["deepfm*"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests that require real ML-100K data (deselect with '-m \"not slow\"')",
+]
