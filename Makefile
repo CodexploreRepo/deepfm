@@ -1,25 +1,23 @@
-UV := python3 -m uv
-PYTHON := python3
+.PHONY: install train test lint format
 
-.PHONY: install train test lint format clean
+VENV := .venv
+UV := python3 -m uv
+PYTHON := $(VENV)/bin/python
 
 install:
-	$(UV) venv && $(UV) pip install -e ".[dev]"
+	$(UV) venv $(VENV)
+	$(UV) pip install -e ".[dev]" --python $(PYTHON)
 
 train:
 	$(PYTHON) -m deepfm train --config configs/deepfm_movielens.yaml
 
 test:
-	$(PYTHON) -m pytest tests/ -v
+	$(VENV)/bin/pytest tests/ -v
 
 lint:
-	$(PYTHON) -m ruff check deepfm/ tests/
-	$(PYTHON) -m ruff format --check deepfm/ tests/
+	$(VENV)/bin/ruff check deepfm/ tests/
+	$(VENV)/bin/ruff format --check deepfm/ tests/
 
 format:
-	$(PYTHON) -m ruff check --fix deepfm/ tests/
-	$(PYTHON) -m ruff format deepfm/ tests/
-
-clean:
-	rm -rf outputs/ __pycache__ .pytest_cache .ruff_cache *.egg-info
-	find . -type d -name __pycache__ -exec rm -rf {} +
+	$(VENV)/bin/ruff check --fix deepfm/ tests/
+	$(VENV)/bin/ruff format deepfm/ tests/

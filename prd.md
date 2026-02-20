@@ -52,7 +52,7 @@ deepfm/
 │   │   ├── schema.py                   # FieldSchema, DatasetSchema
 │   │   ├── dataset.py                  # TabularDataset (generic torch Dataset)
 │   │   ├── transforms.py              # LabelEncoder, MinMaxScaler, MultiHotEncoder
-│   │   └── movielens.py               # MovieLens-100K adapter (auto-downloads)
+│   │   └── movielens.py               # MovieLens-100K adapter
 │   ├── models/
 │   │   ├── __init__.py                 # Model registry + factory
 │   │   ├── base.py                     # BaseCTRModel (abstract base)
@@ -123,7 +123,7 @@ Since FM second-order interaction requires same-dimension vectors for Hadamard p
 
 Dataset: MovieLens-100K (~100K ratings, 943 users, 1682 movies)
 File format: Tab-separated files (u.data, u.user, u.item) — parsed natively.
-Auto-download: Adapter downloads and extracts from grouplens.org if `data_dir` doesn't exist.
+Dataset is downloaded and stored in 'data' folder
 
 | Feature    | Type     | Details                                                    | Embedding Dim |
 | ---------- | -------- | ---------------------------------------------------------- | ------------- |
@@ -163,7 +163,7 @@ Per user, ordered by timestamp:
 
 Write an adapter class that:
 
-1. Reads raw data files (auto-download optional)
+1. Reads raw data files
 2. Defines `FieldSchema` for each feature with custom embedding dims
 3. Fits encoders on train split
 4. Implements leave-one-out split + negative sampling
@@ -261,7 +261,6 @@ ExperimentConfig
 │   ├── label_threshold: 4.0
 │   ├── num_neg_train: 4              # negatives per positive during training
 │   ├── num_neg_eval: 999             # negatives per positive during eval
-│   └── auto_download: true
 ├── FeatureConfig
 │   └── embedding_l2_reg: 1e-5
 ├── FMConfig
@@ -332,7 +331,7 @@ For each user in val/test:
 
 - **Package manager**: uv
 - **Linting/formatting**: ruff (no strict type checking)
-- **Build tool**: Makefile with targets: `train`, `test`, `lint`, `download-data`, `install`
+- **Build tool**: Makefile with targets: `train`, `test`, `lint`, `install`
 - **Experiment tracking**: Python logging (stdout + file), no external tracking service
 - **Tests**: Unit tests with synthetic data + integration test on real ML-100K
 
@@ -343,7 +342,7 @@ For each user in val/test:
 | Phase             | Files                                                                              | Dependencies |
 | ----------------- | ---------------------------------------------------------------------------------- | ------------ |
 | 1. Foundation     | pyproject.toml, Makefile, CLAUDE.md, config.py, schema.py, transforms.py, utils/\* | None         |
-| 2. Data Pipeline  | dataset.py, movielens.py (with auto-download + neg sampling)                       | Phase 1      |
+| 2. Data Pipeline  | dataset.py, movielens.py (neg sampling)                                            | Phase 1      |
 | 3. Model Layers   | embedding.py, fm.py, dnn.py, cin.py, attention.py                                  | Phase 1      |
 | 4. Models         | base.py, deepfm.py, xdeepfm.py, attention_deepfm.py, registry                      | Phase 2, 3   |
 | 5. Training & CLI | metrics.py (AUC, LogLoss, HR@K, NDCG@K), trainer.py, cli.py, YAML configs          | Phase 4      |
@@ -372,7 +371,7 @@ pyyaml>=6.0
 dacite>=1.8
 ```
 
-Dev: `pytest>=7.0, pytest-cov, ruff`
+Dev: `pytest>=7.0, pytest-cov, ruff, ipykernel`
 
 ---
 
@@ -383,7 +382,7 @@ Dev: `pytest>=7.0, pytest-cov, ruff`
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 
-# Train DeepFM (auto-downloads ML-100K on first run)
+# Train DeepFM
 python -m deepfm train --config configs/deepfm_movielens.yaml
 
 # Train xDeepFM with batch size override
