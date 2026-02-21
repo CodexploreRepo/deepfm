@@ -73,7 +73,9 @@ class MovieLensAdapter:
     ) -> tuple[DatasetSchema, TabularDataset, TabularDataset, TabularDataset]:
         """Load data, split, encode, and return (schema, train, val, test)."""
         df = self._load_and_merge()
-        self._train_df, self._val_df, self._test_df = self._leave_one_out_split(df)
+        self._train_df, self._val_df, self._test_df = self._leave_one_out_split(
+            df
+        )
 
         # Fit encoders on training data only
         self._fit_encoders(self._train_df)
@@ -326,8 +328,14 @@ class MovieLensAdapter:
         neg_df = pd.DataFrame(neg_rows)
         # Keep only columns present in train_df that we need
         keep_cols = [
-            "user_id", "movie_id", "gender", "age",
-            "occupation", "zip_prefix", "genres", "label",
+            "user_id",
+            "movie_id",
+            "gender",
+            "age",
+            "occupation",
+            "zip_prefix",
+            "genres",
+            "label",
         ]
         combined = pd.concat(
             [train_df[keep_cols], neg_df[keep_cols]], ignore_index=True
@@ -348,8 +356,14 @@ class MovieLensAdapter:
 
         neg_df = pd.DataFrame(neg_rows)
         keep_cols = [
-            "user_id", "movie_id", "gender", "age",
-            "occupation", "zip_prefix", "genres", "label",
+            "user_id",
+            "movie_id",
+            "gender",
+            "age",
+            "occupation",
+            "zip_prefix",
+            "genres",
+            "label",
         ]
         return pd.concat(
             [eval_df[keep_cols], neg_df[keep_cols]], ignore_index=True

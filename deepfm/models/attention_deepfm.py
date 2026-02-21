@@ -32,7 +32,9 @@ class AttentionDeepFM(BaseCTRModel):
             use_residual=self.config.attention.use_residual,
         )
         # DNN input: attention-refined field embeddings (flattened) + raw flat embeddings
-        attn_flat_dim = self.schema.num_fields * self.config.feature.fm_embed_dim
+        attn_flat_dim = (
+            self.schema.num_fields * self.config.feature.fm_embed_dim
+        )
         dnn_input_dim = attn_flat_dim + self.schema.total_embedding_dim
         self.dnn = DNN(
             input_dim=dnn_input_dim,

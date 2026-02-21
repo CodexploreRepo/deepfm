@@ -82,7 +82,9 @@ class CIN(nn.Module):
             # Outer product: (B, H_k, D) x (B, F, D) → (B, H_k * F, D)
             # Using einsum: z_{h,f,d} = hidden_{h,d} * x0_{f,d}
             outer = torch.einsum("bhd,bfd->bhfd", hidden, x0)  # (B, H_k, F, D)
-            outer = outer.reshape(batch_size, -1, self.embed_dim)  # (B, H_k*F, D)
+            outer = outer.reshape(
+                batch_size, -1, self.embed_dim
+            )  # (B, H_k*F, D)
 
             # Compress with Conv1d: (B, H_k*F, D) → (B, layer_size, D)
             compressed = conv(outer)  # (B, layer_size, D)

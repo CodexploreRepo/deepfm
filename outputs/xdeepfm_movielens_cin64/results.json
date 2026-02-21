@@ -1,11 +1,11 @@
 {
-  "run_id": "deepfm_movielens",
-  "timestamp": "2026-02-21T12:52:04",
+  "run_id": "xdeepfm_movielens_cin64",
+  "timestamp": "2026-02-21T16:57:35",
   "config": {
-    "model_name": "deepfm",
+    "model_name": "xdeepfm",
     "seed": 42,
     "device": "auto",
-    "output_dir": "outputs/deepfm_movielens",
+    "output_dir": "outputs/xdeepfm_movielens_cin64",
     "data": {
       "dataset_name": "movielens",
       "data_dir": "data/ml-100k",
@@ -17,20 +17,26 @@
     },
     "feature": {
       "fm_embed_dim": 16,
-      "embedding_l2_reg": 1e-5
+      "embedding_l2_reg": 1e-05
     },
     "fm": {
       "use_first_order": true,
       "use_second_order": true
     },
     "dnn": {
-      "hidden_units": [256, 128, 64],
+      "hidden_units": [
+        256,
+        128,
+        64
+      ],
       "activation": "relu",
       "dropout": 0.1,
       "use_batch_norm": true
     },
     "cin": {
-      "layer_sizes": [128, 128],
+      "layer_sizes": [
+        64
+      ],
       "split_half": true
     },
     "attention": {
@@ -42,7 +48,7 @@
     "training": {
       "num_epochs": 50,
       "batch_size": 4096,
-      "lr": 0.001,
+      "lr": 0.0005,
       "optimizer": "adam",
       "scheduler": "reduce_on_plateau",
       "early_stopping_patience": 5,
@@ -51,27 +57,27 @@
     }
   },
   "val_metrics": {
-    "auc": 0.915651368259297,
-    "logloss": 0.055668316089096344,
-    "HR@5": 0.1359026369168357,
-    "NDCG@5": 0.08923394410460678,
-    "HR@10": 0.20689655172413793,
-    "NDCG@10": 0.11164414447887151,
-    "HR@20": 0.3286004056795132,
-    "NDCG@20": 0.14262730639733867
+    "auc": 0.9159529802941875,
+    "logloss": 0.0598865881500957,
+    "HR@5": 0.1440162271805274,
+    "NDCG@5": 0.09603639818446391,
+    "HR@10": 0.2434077079107505,
+    "NDCG@10": 0.12732844475932859,
+    "HR@20": 0.35294117647058826,
+    "NDCG@20": 0.15505892798744333
   },
   "test_metrics": {
-    "auc": 0.9063174536941302,
-    "logloss": 0.05818618431064015,
-    "HR@5": 0.13991769547325103,
-    "NDCG@5": 0.09210859003227971,
-    "HR@10": 0.21604938271604937,
-    "NDCG@10": 0.11665964743884107,
-    "HR@20": 0.3477366255144033,
-    "NDCG@20": 0.15001817619038704
+    "auc": 0.9068016845924309,
+    "logloss": 0.05325517797985782,
+    "HR@5": 0.13580246913580246,
+    "NDCG@5": 0.08737915047128152,
+    "HR@10": 0.22016460905349794,
+    "NDCG@10": 0.11448341965135535,
+    "HR@20": 0.345679012345679,
+    "NDCG@20": 0.14628921146766347
   },
   "training_info": {
-    "best_epoch": 13,
-    "total_epochs": 18
+    "best_epoch": 23,
+    "total_epochs": 28
   }
 }

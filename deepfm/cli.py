@@ -34,7 +34,7 @@ def _build_adapter(config: ExperimentConfig) -> MovieLensAdapter:
 
 def train_command(config: ExperimentConfig) -> None:
     """Execute the training pipeline."""
-    logger = get_logger("cli", log_file=f"{config.output_dir}/train.log")
+    logger = get_logger("deepfm", log_file=f"{config.output_dir}/train.log")
 
     seed_everything(config.seed)
     device = resolve_device(config.device)
@@ -70,7 +70,7 @@ def train_command(config: ExperimentConfig) -> None:
 
 def evaluate_command(config: ExperimentConfig) -> None:
     """Evaluate a saved model checkpoint."""
-    logger = get_logger("cli")
+    logger = get_logger("deepfm")
 
     seed_everything(config.seed)
     device = resolve_device(config.device)
@@ -116,7 +116,7 @@ def _print_comparison_table(runs: list[dict]) -> None:
     """Print an aligned side-by-side metric table for a list of run dicts."""
     # Column widths
     W_RUN = 28
-    W_MODEL = 14
+    W_MODEL = 20
     W_HPARAM = 20
     W_METRIC = 10
 
@@ -165,8 +165,8 @@ def _print_comparison_table(runs: list[dict]) -> None:
             + _fmt(vm, "logloss").rjust(W_METRIC)
             + _fmt(tm, "auc").rjust(W_METRIC)
             + _fmt(tm, "logloss").rjust(W_METRIC)
-            + _fmt(tm, "hr@10").rjust(W_METRIC)
-            + _fmt(tm, "ndcg@10").rjust(W_METRIC)
+            + _fmt(tm, "HR@10").rjust(W_METRIC)
+            + _fmt(tm, "NDCG@10").rjust(W_METRIC)
             + str(ti.get("best_epoch", "-")).rjust(W_METRIC)
         )
         print(row)
@@ -228,7 +228,9 @@ def main() -> None:
         "compare", help="Compare experiment results"
     )
     cmp_parser.add_argument(
-        "--dir", default="outputs", help="Directory to scan for results.json files"
+        "--dir",
+        default="outputs",
+        help="Directory to scan for results.json files",
     )
 
     args = parser.parse_args()

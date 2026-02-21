@@ -118,4 +118,10 @@ def _parse_value(value: str) -> Any:
         return float(value)
     except ValueError:
         pass
+    if value.startswith("[") and value.endswith("]"):
+        import ast
+        try:
+            return ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+            pass
     return value

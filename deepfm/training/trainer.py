@@ -55,7 +55,7 @@ class Trainer:
         self.adapter = adapter
         self.device = device
 
-        self.logger = get_logger("trainer")
+        self.logger = get_logger("deepfm.trainer")
         self.criterion = nn.BCEWithLogitsLoss()
         self.optimizer = self._build_optimizer()
         self.scheduler = self._build_scheduler()

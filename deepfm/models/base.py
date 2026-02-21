@@ -63,7 +63,9 @@ class BaseCTRModel(nn.Module, ABC):
             Raw logits (B, 1).
         """
         first_order, field_embeddings, flat_embeddings = self.embedding(batch)
-        return self._forward_components(first_order, field_embeddings, flat_embeddings)
+        return self._forward_components(
+            first_order, field_embeddings, flat_embeddings
+        )
 
     def predict(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         """Predict probabilities (sigmoid applied).
