@@ -389,3 +389,53 @@ print(f'LogLoss: {compute_logloss(labels, scores):.3f}')
 **Files:** (none — verification only)
 **Do:** Run all tests and lint checks.
 **Verify:** `make test && make lint`
+
+---
+
+## Phase 7: Criteo Dataset (Future)
+
+Criteo provides a large-scale CTR dataset with **13 dense (continuous) features** and **26 sparse (categorical) features**. This phase exercises the `FeatureType.DENSE` path that MovieLens doesn't use.
+
+### Step 7.1 — Criteo data download & exploration
+
+**Files:** `scripts/download_criteo.sh`, `notebooks/criteo_exploration.ipynb`
+**Do:** Download script for the Criteo Display Ads dataset (or Kaggle subset). Notebook to explore the data format: 13 integer (dense) columns, 26 hashed categorical (sparse) columns, and the binary label. Document missing-value rates and cardinality per field.
+**Verify:** `bash scripts/download_criteo.sh && jupyter nbconvert --execute notebooks/criteo_exploration.ipynb`
+
+### Step 7.2 — CriteoAdapter
+
+**Files:** `deepfm/data/criteo.py`
+**Do:** `CriteoAdapter` class following the adapter pattern:
+
+- Load TSV data (no header; columns: label, I1–I13 dense, C1–C26 sparse).
+- Fit `LabelEncoder` on each sparse column (hash-bucket or frequency threshold for OOV).
+- Fit `MinMaxScaler` on each dense column (handle missing values with fill-zero or fill-median).
+- Build `FieldSchema` for all 39 features: 13 as `FeatureType.DENSE`, 26 as `FeatureType.SPARSE`.
+- Split: random 80/10/10 train/val/test (no temporal signal in Criteo).
+- Return `DatasetSchema` + train/val/test `TabularDataset`.
+  **Verify:** `python -c "
+from deepfm.config import load_config
+from deepfm.data.criteo import CriteoAdapter
+adapter = CriteoAdapter('data/criteo', load_config('configs/deepfm_criteo.yaml').data)
+schema, train_ds, val_ds, test_ds = adapter.build()
+print(f'Schema fields: {len(schema.fields)} (13 dense + 26 sparse)')
+print(f'Train: {len(train_ds)}, Val: {len(val_ds)}, Test: {len(test_ds)}')
+"`
+
+### Step 7.3 — Criteo YAML config
+
+**Files:** `configs/deepfm_criteo.yaml`
+**Do:** Config for DeepFM on Criteo. Key differences from MovieLens: larger embedding vocab sizes, dense feature handling, larger batch size (4096+), dataset name set to `criteo`.
+**Verify:** `python -c "from deepfm.config import load_config; c = load_config('configs/deepfm_criteo.yaml'); print(c.model_name, c.data.dataset_name)"`
+
+### Step 7.4 — Criteo integration test
+
+**Files:** `tests/test_criteo_integration.py`
+**Do:** End-to-end test on Criteo data (marked `@pytest.mark.slow`): load data → train DeepFM for 1 epoch on a small subset → verify AUC > 0.5 and that dense features flow through `FeatureEmbedding` correctly.
+**Verify:** `pytest tests/test_criteo_integration.py -v`
+
+### Step 7.5 — Criteo training run
+
+**Files:** (none — verification only)
+**Do:** Full smoke test to confirm the pipeline works end-to-end with dense features. Train DeepFM on Criteo for a few epochs, verify metrics are reasonable.
+**Verify:** `python -m deepfm train --config configs/deepfm_criteo.yaml --override training.num_epochs=3 training.batch_size=4096`

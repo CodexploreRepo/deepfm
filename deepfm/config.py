@@ -13,7 +13,7 @@ from dacite import from_dict
 @dataclass
 class DataConfig:
     dataset_name: str = "movielens"
-    data_dir: str = "data/ml-100k"
+    data_dir: str = "/Users/codexplore/Developer/repos/deepfm/data/ml-100k"
     split_strategy: str = "leave_one_out"
     min_interactions: int = 3
     label_threshold: float = 4.0
