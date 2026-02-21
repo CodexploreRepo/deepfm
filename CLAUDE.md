@@ -29,13 +29,14 @@ Production-grade DeepFM and variants (xDeepFM, AttentionDeepFM) for CTR predicti
 
 ## Training Setup
 
-- **Split**: leave-one-out per user by timestamp — last → test, 2nd-to-last → val, rest → train. Users with <3 interactions go entirely to train.
-- **Negative sampling**: The training dataset has only observed positives; negatives are sampled from movies the user has never rated (across the full dataset).
-  - Train: 4 negatives per positive, re-sampled every epoch (dynamic) to act as regularizer.
-  - Val/Test: 999 negatives per positive, fixed pool — simulates ranking 1 relevant item among 1000 candidates.
+- **Split**: global temporal split by timestamp — 80% train / 10% val / 10% test (by quantile). For val/test, the first chronologically positive interaction per user in that window is kept (1 positive per user); users with no positive in a window or not seen in train are excluded from that split's eval. `_user_items` is built from all interactions to prevent negative collisions. Legacy leave-one-out is still available via `data.split_strategy=leave_one_out`.
+- **Negative sampling**:
+  - Train: 4 negatives per positive, uniform random, re-sampled every epoch (dynamic) to act as regularizer.
+  - Val/Test: 999 negatives per positive, popularity-stratified (`random.choices` with weights `count(item)^0.75`). Items unseen in train get count=1 (minimum weight). Simulates ranking 1 relevant item among 1000 candidates with harder negatives.
+  - To restore uniform eval negatives: `data.neg_sampling_alpha=0.0`.
 - **Metrics**:
   - AUC, LogLoss — computed over all rows flattened (global discrimination / calibration).
-  - HR@K, NDCG@K (K=5,10,20) — computed per user. Scores for each user's 1+999 items are ranked; HR@K = fraction of users where the positive lands in top-K; NDCG@K = mean 1/log₂(rank+1), rewarding higher ranks more.
+  - HR@K, NDCG@K (K=1,5,10,20) — computed per user. Scores for each user's 1+999 items are ranked; HR@K = fraction of users where the positive lands in top-K; NDCG@K = mean 1/log₂(rank+1), rewarding higher ranks more.
 
 ## Commands
 

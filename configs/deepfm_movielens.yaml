@@ -6,7 +6,10 @@ output_dir: outputs/deepfm_movielens
 data:
   dataset_name: movielens
   data_dir: data/ml-100k
-  split_strategy: leave_one_out
+  split_strategy: temporal
+  temporal_val_ratio: 0.1
+  temporal_test_ratio: 0.1
+  neg_sampling_alpha: 0.75
   min_interactions: 3
   label_threshold: 4.0
   num_neg_train: 4
@@ -35,3 +38,4 @@ training:
   early_stopping_patience: 5
   metric: auc
   gradient_clip_norm: 1.0
+  ranking_ks: [1, 5, 10, 20]

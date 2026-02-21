@@ -64,6 +64,7 @@ class MovieLensAdapter:
         self._item_features: pd.DataFrame | None = None
         self._user_features: pd.DataFrame | None = None
         self._all_movie_ids: set[int] | None = None
+        self._pop_weights: dict[int, float] | None = None
         self._train_df: pd.DataFrame | None = None
         self._val_df: pd.DataFrame | None = None
         self._test_df: pd.DataFrame | None = None
@@ -73,9 +74,12 @@ class MovieLensAdapter:
     ) -> tuple[DatasetSchema, TabularDataset, TabularDataset, TabularDataset]:
         """Load data, split, encode, and return (schema, train, val, test)."""
         df = self._load_and_merge()
-        self._train_df, self._val_df, self._test_df = self._leave_one_out_split(
-            df
-        )
+        if self.config.split_strategy == "temporal":
+            self._train_df, self._val_df, self._test_df = self._temporal_split(df)
+        else:
+            self._train_df, self._val_df, self._test_df = self._leave_one_out_split(df)
+
+        self._pop_weights = self._build_popularity_weights(self._train_df)
 
         # Fit encoders on training data only
         self._fit_encoders(self._train_df)
@@ -201,6 +205,43 @@ class MovieLensAdapter:
 
         return train_df, val_df, test_df
 
+    def _temporal_split(
+        self, df: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Global temporal split: 80/10/10 by timestamp quantile."""
+        df = df.sort_values("timestamp").reset_index(drop=True)
+
+        val_ratio = self.config.temporal_val_ratio
+        test_ratio = self.config.temporal_test_ratio
+
+        train_cutoff = df["timestamp"].quantile(1 - val_ratio - test_ratio)
+        val_cutoff = df["timestamp"].quantile(1 - test_ratio)
+
+        train_df = df[df["timestamp"] <= train_cutoff]
+        val_df_all = df[
+            (df["timestamp"] > train_cutoff) & (df["timestamp"] <= val_cutoff)
+        ]
+        test_df_all = df[df["timestamp"] > val_cutoff]
+
+        # Build _user_items from ALL interactions (prevents negative collisions)
+        self._user_items = (
+            df.groupby("user_id")["movie_id"].apply(set).to_dict()
+        )
+
+        train_users = set(train_df["user_id"].unique())
+
+        # For val/test: keep only positives, 1 per user (first chronologically),
+        # restricted to users seen in train
+        def _first_positive_per_user(split_df: pd.DataFrame) -> pd.DataFrame:
+            positives = split_df[split_df["label"] == 1.0]
+            positives = positives[positives["user_id"].isin(train_users)]
+            return positives.groupby("user_id").first().reset_index()
+
+        val_df = _first_positive_per_user(val_df_all)
+        test_df = _first_positive_per_user(test_df_all)
+
+        return train_df, val_df, test_df
+
     # ------------------------------------------------------------------
     # Encoding
     # ------------------------------------------------------------------
@@ -283,10 +324,23 @@ class MovieLensAdapter:
     # Negative sampling
     # ------------------------------------------------------------------
 
+    def _build_popularity_weights(self, train_df: pd.DataFrame) -> dict[int, float]:
+        """Popularity-stratified weights: count(item)^alpha, min count=1."""
+        alpha = self.config.neg_sampling_alpha
+        counts = (
+            train_df[train_df["label"] == 1.0]["movie_id"]
+            .value_counts()
+            .to_dict()
+        )
+        return {
+            item: max(counts.get(item, 1), 1) ** alpha
+            for item in self._all_movie_ids
+        }
+
     def _sample_negatives_for_user(
         self, user_id: int, num_neg: int
     ) -> list[int]:
-        """Sample movie IDs the user has NOT interacted with."""
+        """Sample movie IDs the user has NOT interacted with (uniform)."""
         seen = self._user_items[user_id]
         candidates = list(self._all_movie_ids - seen)
         if len(candidates) < num_neg:
@@ -343,14 +397,19 @@ class MovieLensAdapter:
         return combined.sample(frac=1.0).reset_index(drop=True)
 
     def _add_eval_negatives(self, eval_df: pd.DataFrame) -> pd.DataFrame:
-        """Add num_neg_eval negatives per positive sample for ranking eval."""
+        """Add num_neg_eval negatives per positive sample for ranking eval.
+
+        Uses popularity-stratified sampling (alpha from config) so harder
+        negatives are included, making model differences easier to detect.
+        """
         user_lookup = self._user_features.set_index("user_id")
         neg_rows = []
         for _, pos_row in eval_df.iterrows():
             uid = pos_row["user_id"]
-            neg_movies = self._sample_negatives_for_user(
-                uid, self.config.num_neg_eval
-            )
+            candidates = list(self._all_movie_ids - self._user_items[uid])
+            weights = [self._pop_weights[c] for c in candidates]
+            num_neg = min(self.config.num_neg_eval, len(candidates))
+            neg_movies = random.choices(candidates, weights=weights, k=num_neg)
             user_row = user_lookup.loc[uid]
             neg_rows.extend(self._build_neg_rows(uid, neg_movies, user_row))
 

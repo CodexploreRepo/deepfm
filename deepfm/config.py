@@ -14,7 +14,10 @@ from dacite import from_dict
 class DataConfig:
     dataset_name: str = "movielens"
     data_dir: str = "/Users/codexplore/Developer/repos/deepfm/data/ml-100k"
-    split_strategy: str = "leave_one_out"
+    split_strategy: str = "temporal"
+    temporal_val_ratio: float = 0.1
+    temporal_test_ratio: float = 0.1
+    neg_sampling_alpha: float = 0.75
     min_interactions: int = 3
     label_threshold: float = 4.0
     num_neg_train: int = 4
@@ -65,6 +68,7 @@ class TrainingConfig:
     early_stopping_patience: int = 5
     metric: str = "auc"
     gradient_clip_norm: float = 1.0
+    ranking_ks: list[int] = field(default_factory=lambda: [1, 5, 10, 20])
 
 
 @dataclass

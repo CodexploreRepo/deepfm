@@ -59,7 +59,7 @@ class Trainer:
         self.criterion = nn.BCEWithLogitsLoss()
         self.optimizer = self._build_optimizer()
         self.scheduler = self._build_scheduler()
-        self.ranking_evaluator = RankingEvaluator(ks=[5, 10, 20])
+        self.ranking_evaluator = RankingEvaluator(ks=config.training.ranking_ks)
 
         self.output_dir = Path(config.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
