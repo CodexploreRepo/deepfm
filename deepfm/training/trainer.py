@@ -96,8 +96,10 @@ class Trainer:
         """
         tc = self.config.training
         best_metric = -float("inf")
+        best_epoch = 0
         patience_counter = 0
         best_metrics: dict[str, float] = {}
+        epoch = 0
 
         for epoch in range(1, tc.num_epochs + 1):
             # Dynamic negative re-sampling
@@ -132,6 +134,7 @@ class Trainer:
             # Early stopping + checkpointing
             if current_metric > best_metric:
                 best_metric = current_metric
+                best_epoch = epoch
                 patience_counter = 0
                 best_metrics = val_metrics
                 save_checkpoint(
@@ -161,7 +164,35 @@ class Trainer:
         for k, v in test_metrics.items():
             self.logger.info(f"  test_{k} = {v:.4f}")
 
+        self._save_results(best_metrics, test_metrics, best_epoch, epoch)
+
         return best_metrics
+
+    def _save_results(
+        self,
+        val_metrics: dict[str, float],
+        test_metrics: dict[str, float],
+        best_epoch: int,
+        total_epochs: int,
+    ) -> None:
+        import dataclasses
+        from datetime import datetime
+
+        from deepfm.utils.io import save_results
+
+        results = {
+            "run_id": self.output_dir.name,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "config": dataclasses.asdict(self.config),
+            "val_metrics": val_metrics,
+            "test_metrics": test_metrics,
+            "training_info": {
+                "best_epoch": best_epoch,
+                "total_epochs": total_epochs,
+            },
+        }
+        save_results(results, self.output_dir / "results.json")
+        self.logger.info(f"Results saved to {self.output_dir / 'results.json'}")
 
     def _train_epoch(self, epoch: int) -> float:
         """Run one training epoch. Returns average loss."""

@@ -54,6 +54,68 @@ python -m deepfm train --config configs/attention_deepfm_movielens.yaml
 python -m deepfm evaluate --config configs/deepfm_movielens.yaml
 ```
 
+## Hyperparameter Tuning
+
+Use `make train ARGS="key=value ..."` to override any config value without editing YAML.
+Always set `output_dir` so each run gets its own checkpoint and `results.json`.
+
+```bash
+# Baseline (saves to outputs/deepfm_movielens/)
+make train
+
+# Different learning rate
+make train ARGS="output_dir=outputs/deepfm_lr5e4 training.lr=5e-4"
+
+# Larger embedding dim
+make train ARGS="output_dir=outputs/deepfm_emb32 feature.fm_embed_dim=32"
+
+# Different model variant
+make train ARGS="output_dir=outputs/xdeepfm model_name=xdeepfm"
+
+# Multiple overrides at once
+make train ARGS="output_dir=outputs/exp1 training.lr=5e-4 dnn.dropout=0.2 feature.fm_embed_dim=32"
+```
+
+### Common override keys
+
+| Key                                | Default                    | Notes                                   |
+| ---------------------------------- | -------------------------- | --------------------------------------- |
+| `output_dir`                       | `outputs/deepfm_movielens` | Set per-run to avoid overwriting        |
+| `model_name`                       | `deepfm`                   | `deepfm`, `xdeepfm`, `attention_deepfm` |
+| `training.lr`                      | `1e-3`                     | Learning rate                           |
+| `training.batch_size`              | `4096`                     |                                         |
+| `training.num_epochs`              | `50`                       |                                         |
+| `training.optimizer`               | `adam`                     | `adam`, `adamw`, `sgd`                  |
+| `training.early_stopping_patience` | `5`                        |                                         |
+| `feature.fm_embed_dim`             | `16`                       | Projected embedding dimension           |
+| `feature.embedding_l2_reg`         | `1e-5`                     | L2 penalty on embeddings                |
+| `dnn.dropout`                      | `0.1`                      |                                         |
+| `dnn.use_batch_norm`               | `true`                     |                                         |
+| `attention.num_heads`              | `4`                        | AttentionDeepFM only                    |
+
+For list-valued fields (`dnn.hidden_units`, `cin.layer_sizes`), create a separate YAML config and pass it with `--config`.
+
+### Comparing runs
+
+Each completed run writes `results.json` to its `output_dir`. Compare all runs at once:
+
+```bash
+make compare                        # scans outputs/ recursively
+make compare RUNS_DIR=outputs/exp1  # single run or subdirectory
+```
+
+Example output:
+
+```
+----------------------------------------------------------------------------------------------------------------------------
+Run                         Model         LR·BS·Emb           Val AUC  Val LogL   Tst AUC  Tst LogL     HR@10   NDCG@10     BstEp
+----------------------------------------------------------------------------------------------------------------------------
+deepfm_movielens            deepfm        0.001·4096·16        0.8712    0.4231    0.8634    0.4312    0.1523    0.0812         8
+deepfm_lr5e4                deepfm        0.0005·4096·16       0.8798    0.4102    0.8721    0.4189    0.1601    0.0867        12
+deepfm_emb32                deepfm        0.001·4096·32        0.8841    0.4053    0.8763    0.4141    0.1648    0.0891        10
+----------------------------------------------------------------------------------------------------------------------------
+```
+
 ## Project Structure
 
 ```
@@ -82,7 +144,7 @@ deepfm/
   utils/
     seeding.py                  # seed_everything
     logging.py                  # get_logger
-    io.py                       # save/load checkpoint
+    io.py                       # save/load checkpoint, save_results
 configs/
   deepfm_movielens.yaml
   xdeepfm_movielens.yaml

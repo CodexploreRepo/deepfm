@@ -2,7 +2,8 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+# Pytorch: ignore the pytorch files generated during training, which are not needed for inference and can be large in size
+*.pt
 # C extensions
 *.so
 
