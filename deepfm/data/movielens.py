@@ -11,7 +11,7 @@ import pandas as pd
 from deepfm.config import DataConfig
 from deepfm.data.dataset import TabularDataset
 from deepfm.data.schema import DatasetSchema, FeatureType, FieldSchema
-from deepfm.data.transforms import LabelEncoder, MultiHotEncoder
+from deepfm.data.transforms import LabelEncoder, MinMaxScaler, MultiHotEncoder
 
 # Genre columns in u.item (19 binary columns after the first 5 metadata cols)
 GENRE_NAMES = [
@@ -48,6 +48,33 @@ def _bucketize_age(age: int) -> int:
     return AGE_BUCKETS[0]
 
 
+def _bucket_release_year(year) -> str:
+    """Map a year to a 5-year bin string like '1990-1994', or 'unknown'."""
+    if pd.isna(year):
+        return "unknown"
+    y = int(year)
+    base = (y // 5) * 5
+    return f"{base}-{base + 4}"
+
+
+def _bucket_movie_age(years_float) -> str:
+    """Map a float number of years to an age bucket string."""
+    if pd.isna(years_float) or years_float < 0:
+        return "unknown"
+    y = years_float
+    if y < 1:
+        return "<1yr"
+    if y < 3:
+        return "1-3yr"
+    if y < 7:
+        return "3-7yr"
+    if y < 15:
+        return "7-15yr"
+    if y < 30:
+        return "15-30yr"
+    return "30+yr"
+
+
 class MovieLensAdapter:
     """Loads MovieLens-100K and produces train/val/test TabularDatasets.
 
@@ -59,6 +86,7 @@ class MovieLensAdapter:
         self.data_dir = Path(config.data_dir)
         self.config = config
         self._encoders: dict[str, LabelEncoder | MultiHotEncoder] = {}
+        self._scalers: dict[str, MinMaxScaler] = {}
         self._schema: DatasetSchema | None = None
         self._user_items: dict[int, set[int]] | None = None
         self._item_features: pd.DataFrame | None = None
@@ -68,6 +96,8 @@ class MovieLensAdapter:
         self._train_df: pd.DataFrame | None = None
         self._val_df: pd.DataFrame | None = None
         self._test_df: pd.DataFrame | None = None
+        self._user_counts: pd.Series | None = None
+        self._item_counts: pd.Series | None = None
 
     def build(
         self,
@@ -148,26 +178,53 @@ class MovieLensAdapter:
             encoding="latin-1",
         )
         # Convert genre binary columns to list of genre names
-        genre_cols = items[GENRE_NAMES]
-        items["genres"] = genre_cols.apply(
+        genre_cols_df = items[GENRE_NAMES]
+        items["genres"] = genre_cols_df.apply(
             lambda row: [g for g, v in zip(GENRE_NAMES, row) if v == 1], axis=1
         )
-        items = items[["movie_id", "genres"]]
 
-        # Store features for negative sampling
-        self._item_features = items.copy()
+        # Item-level derived features (purely from item metadata)
+        items["_release_dt"] = pd.to_datetime(
+            items["release_date"], format="%d-%b-%Y", errors="coerce"
+        )
+        items["release_year_bucket"] = (
+            items["_release_dt"].dt.year.apply(_bucket_release_year)
+        )
+        items["num_genres"] = items[GENRE_NAMES].sum(axis=1).astype(str)
+
+        # Store item features for negative sampling (includes new fields + _release_dt)
+        self._item_features = items[
+            ["movie_id", "genres", "release_year_bucket", "num_genres", "_release_dt"]
+        ].copy()
         self._user_features = users[
             ["user_id", "age", "gender", "occupation", "zip_prefix"]
         ].copy()
         self._all_movie_ids = set(items["movie_id"].tolist())
 
-        # Merge
-        df = ratings.merge(users, on="user_id").merge(items, on="movie_id")
+        # Merge (bring in item-level features except private _release_dt for df)
+        items_for_merge = items[
+            ["movie_id", "genres", "release_year_bucket", "num_genres", "_release_dt"]
+        ]
+        df = ratings.merge(users, on="user_id").merge(items_for_merge, on="movie_id")
 
         # Binary label
         df["label"] = (df["rating"] >= self.config.label_threshold).astype(
             np.float32
         )
+
+        # Context features from rating timestamp
+        df["_rating_dt"] = pd.to_datetime(df["timestamp"], unit="s")
+        weekday = df["_rating_dt"].dt.weekday.astype(float)
+        df["dow_sin"] = np.sin(2 * np.pi * weekday / 7).astype(np.float32)
+        df["dow_cos"] = np.cos(2 * np.pi * weekday / 7).astype(np.float32)
+        hour = df["_rating_dt"].dt.hour.astype(float)
+        df["hour_sin"] = np.sin(2 * np.pi * hour / 24).astype(np.float32)
+        df["hour_cos"] = np.cos(2 * np.pi * hour / 24).astype(np.float32)
+
+        # Movie age at time of rating (years)
+        df["movie_age_at_rating"] = (
+            (df["_rating_dt"] - df["_release_dt"]).dt.days / 365.25
+        ).apply(_bucket_movie_age)
 
         return df
 
@@ -251,7 +308,7 @@ class MovieLensAdapter:
     # ------------------------------------------------------------------
 
     def _fit_encoders(self, train_df: pd.DataFrame) -> None:
-        """Fit label encoders and multi-hot encoder on training data."""
+        """Fit label encoders, multi-hot encoder, and scalers on training data."""
         for col in [
             "user_id",
             "movie_id",
@@ -267,6 +324,24 @@ class MovieLensAdapter:
         genre_enc = MultiHotEncoder(max_length=6)
         genre_enc.fit(train_df["genres"].tolist())
         self._encoders["genres"] = genre_enc
+
+        # New SPARSE fields
+        for col in ["release_year_bucket", "movie_age_at_rating", "num_genres"]:
+            enc = LabelEncoder()
+            enc.fit(train_df[col].tolist())
+            self._encoders[col] = enc
+
+        # DENSE count features: fit scalers on training positives only (no leakage)
+        pos_train = train_df[train_df["label"] == 1]
+        self._user_counts = pos_train.groupby("user_id").size()
+        self._item_counts = pos_train.groupby("movie_id").size()
+
+        self._scalers["user_rating_count"] = MinMaxScaler().fit(
+            np.log1p(self._user_counts.values)
+        )
+        self._scalers["item_rating_count"] = MinMaxScaler().fit(
+            np.log1p(self._item_counts.values)
+        )
 
     def _build_schema(self) -> DatasetSchema:
         """Build DatasetSchema from fitted encoder vocabulary sizes."""
@@ -301,10 +376,49 @@ class MovieLensAdapter:
             combiner="mean",
         )
 
+        # New SPARSE fields
+        new_sparse_specs = [
+            ("release_year_bucket", 4, "item"),
+            ("movie_age_at_rating", 4, "context"),
+            ("num_genres", 4, "item"),
+        ]
+        for name, embed_dim, group in new_sparse_specs:
+            enc = self._encoders[name]
+            fields[name] = FieldSchema(
+                name=name,
+                feature_type=FeatureType.SPARSE,
+                vocabulary_size=enc.vocabulary_size,
+                embedding_dim=embed_dim,
+                group=group,
+            )
+
+        # New DENSE cyclical context features (already in [-1, 1])
+        for name in ["dow_sin", "dow_cos", "hour_sin", "hour_cos"]:
+            fields[name] = FieldSchema(
+                name=name,
+                feature_type=FeatureType.DENSE,
+                embedding_dim=4,
+                group="context",
+            )
+
+        # New DENSE activity/popularity features
+        fields["user_rating_count"] = FieldSchema(
+            name="user_rating_count",
+            feature_type=FeatureType.DENSE,
+            embedding_dim=8,
+            group="user",
+        )
+        fields["item_rating_count"] = FieldSchema(
+            name="item_rating_count",
+            feature_type=FeatureType.DENSE,
+            embedding_dim=8,
+            group="item",
+        )
+
         return DatasetSchema(fields=fields, label_field="label")
 
     def _transform(self, df: pd.DataFrame) -> TabularDataset:
-        """Apply fitted encoders and return a TabularDataset."""
+        """Apply fitted encoders/scalers and return a TabularDataset."""
         features: dict[str, np.ndarray] = {}
 
         for col in [
@@ -320,6 +434,28 @@ class MovieLensAdapter:
 
         genre_enc = self._encoders["genres"]
         features["genres"] = genre_enc.transform(df["genres"].tolist())
+
+        # New SPARSE fields
+        for col in ["release_year_bucket", "movie_age_at_rating", "num_genres"]:
+            features[col] = self._encoders[col].transform(df[col].tolist())
+
+        # DENSE cyclical features — pass through directly
+        for col in ["dow_sin", "dow_cos", "hour_sin", "hour_cos"]:
+            features[col] = df[col].values.astype(np.float32)
+
+        # DENSE count features — log1p + MinMaxScale, OOV → 0
+        user_log = np.log1p(
+            df["user_id"].map(self._user_counts).fillna(0).values
+        )
+        features["user_rating_count"] = (
+            self._scalers["user_rating_count"].transform(user_log).astype(np.float32)
+        )
+        item_log = np.log1p(
+            df["movie_id"].map(self._item_counts).fillna(0).values
+        )
+        features["item_rating_count"] = (
+            self._scalers["item_rating_count"].transform(item_log).astype(np.float32)
+        )
 
         labels = df["label"].values.astype(np.float32)
         return TabularDataset(features, labels)
@@ -354,12 +490,24 @@ class MovieLensAdapter:
         return random.sample(candidates, num_neg)
 
     def _build_neg_rows(
-        self, user_id: int, neg_movie_ids: list[int], user_row: pd.Series
+        self,
+        user_id: int,
+        neg_movie_ids: list[int],
+        user_row: pd.Series,
+        pos_row: pd.Series,
     ) -> list[dict]:
-        """Build negative sample rows with full user + item features."""
+        """Build negative sample rows with full user + item + context features."""
         item_lookup = self._item_features.set_index("movie_id")
+        rating_dt = pos_row["_rating_dt"]
         rows = []
         for mid in neg_movie_ids:
+            item = item_lookup.loc[mid]
+            release_dt = item["_release_dt"]
+            if pd.notna(rating_dt) and pd.notna(release_dt):
+                age_days = (rating_dt - release_dt).days / 365.25
+            else:
+                age_days = float("nan")
+
             row = {
                 "user_id": user_id,
                 "movie_id": mid,
@@ -367,7 +515,15 @@ class MovieLensAdapter:
                 "age": user_row["age"],
                 "occupation": user_row["occupation"],
                 "zip_prefix": user_row["zip_prefix"],
-                "genres": item_lookup.loc[mid, "genres"],
+                "genres": item["genres"],
+                "release_year_bucket": item["release_year_bucket"],
+                "num_genres": item["num_genres"],
+                "movie_age_at_rating": _bucket_movie_age(age_days),
+                "dow_sin": float(pos_row["dow_sin"]),
+                "dow_cos": float(pos_row["dow_cos"]),
+                "hour_sin": float(pos_row["hour_sin"]),
+                "hour_cos": float(pos_row["hour_cos"]),
+                "_rating_dt": rating_dt,
                 "label": 0.0,
             }
             rows.append(row)
@@ -383,10 +539,9 @@ class MovieLensAdapter:
                 uid, self.config.num_neg_train
             )
             user_row = user_lookup.loc[uid]
-            neg_rows.extend(self._build_neg_rows(uid, neg_movies, user_row))
+            neg_rows.extend(self._build_neg_rows(uid, neg_movies, user_row, pos_row))
 
         neg_df = pd.DataFrame(neg_rows)
-        # Keep only columns present in train_df that we need
         keep_cols = [
             "user_id",
             "movie_id",
@@ -395,6 +550,13 @@ class MovieLensAdapter:
             "occupation",
             "zip_prefix",
             "genres",
+            "release_year_bucket",
+            "movie_age_at_rating",
+            "num_genres",
+            "dow_sin",
+            "dow_cos",
+            "hour_sin",
+            "hour_cos",
             "label",
         ]
         combined = pd.concat(
@@ -417,7 +579,7 @@ class MovieLensAdapter:
             num_neg = min(self.config.num_neg_eval, len(candidates))
             neg_movies = random.choices(candidates, weights=weights, k=num_neg)
             user_row = user_lookup.loc[uid]
-            neg_rows.extend(self._build_neg_rows(uid, neg_movies, user_row))
+            neg_rows.extend(self._build_neg_rows(uid, neg_movies, user_row, pos_row))
 
         neg_df = pd.DataFrame(neg_rows)
         keep_cols = [
@@ -428,6 +590,13 @@ class MovieLensAdapter:
             "occupation",
             "zip_prefix",
             "genres",
+            "release_year_bucket",
+            "movie_age_at_rating",
+            "num_genres",
+            "dow_sin",
+            "dow_cos",
+            "hour_sin",
+            "hour_cos",
             "label",
         ]
         return pd.concat(

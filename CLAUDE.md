@@ -17,15 +17,19 @@ Production-grade DeepFM and variants (xDeepFM, AttentionDeepFM) for CTR predicti
 - Loss: BCEWithLogitsLoss (raw logits from model, sigmoid only at predict time).
 - Embedding: Per-field custom dims with projection to common fm_embed_dim for FM/CIN/Attention.
 - OOV: padding_idx=0, unknown features contribute zero.
+- CIN sizing: with F fields, CIN layer 1 input channels = F². Scale `layer_sizes` accordingly — `[128, 128, 64]` for 16 fields (see `configs/xdeepfm_movielens_cin_tuned.yaml`).
 
 ## Dataset
 
 ### MovieLens (ML-100K)
 
 - **Label**: binary — rating ≥ 4.0 → 1 (liked), else 0.
-- **Features** (7 fields, total_embedding_dim=64):
+- **Features** (16 fields, total_embedding_dim=108):
   - User: `user_id` (dim=16), `gender` (4), `age` (4, bucketed to [1,18,25,35,45,50,56]), `occupation` (8), `zip_prefix` (8, first 3 digits)
-  - Item: `movie_id` (dim=16), `genres` (8, SEQUENCE multi-hot, mean-pooled, max_len=6)
+  - Item: `movie_id` (dim=16), `genres` (8, SEQUENCE multi-hot, mean-pooled, max_len=6), `release_year_bucket` (4, SPARSE, 5-yr bins e.g. "1990-1994", missing→"unknown"), `num_genres` (4, SPARSE, count of genre tags as string)
+  - Context: `dow_sin` / `dow_cos` (4 each, DENSE, cyclical day-of-week from rating timestamp), `hour_sin` / `hour_cos` (4 each, DENSE, cyclical hour-of-day), `movie_age_at_rating` (4, SPARSE, age of film at rating time bucketed: <1yr, 1-3yr, 3-7yr, 7-15yr, 15-30yr, 30+yr)
+  - Activity: `user_rating_count` (8, DENSE, log1p+MinMaxScale of train-positive count), `item_rating_count` (8, DENSE, same for items; OOV→0.0)
+- **No-leakage rule**: `user_rating_count` and `item_rating_count` are computed from training positives only, then joined to val/test. Scalers are fit on train only.
 
 ## Training Setup
 
@@ -42,6 +46,7 @@ Production-grade DeepFM and variants (xDeepFM, AttentionDeepFM) for CTR predicti
 
 - `make install` — install with uv
 - `make train [ARGS="key=value ..."]` — train DeepFM on ML-100K
+- To train other models: `.venv/bin/python -m deepfm train --config configs/<model>_movielens.yaml`
 - `make evaluate [ARGS="..."]` — evaluate saved checkpoint
 - `make compare [RUNS_DIR=outputs]` — print side-by-side metric table
 - `make test` — run pytest
