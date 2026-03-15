@@ -20,7 +20,7 @@ feature:
   embedding_l2_reg: 1.0e-5
 
 cin:
-  layer_sizes: [128, 128]
+  layer_sizes: [64]
   split_half: true
 
 dnn:

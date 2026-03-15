@@ -75,9 +75,13 @@ class MovieLensAdapter:
         """Load data, split, encode, and return (schema, train, val, test)."""
         df = self._load_and_merge()
         if self.config.split_strategy == "temporal":
-            self._train_df, self._val_df, self._test_df = self._temporal_split(df)
+            self._train_df, self._val_df, self._test_df = self._temporal_split(
+                df
+            )
         else:
-            self._train_df, self._val_df, self._test_df = self._leave_one_out_split(df)
+            self._train_df, self._val_df, self._test_df = (
+                self._leave_one_out_split(df)
+            )
 
         self._pop_weights = self._build_popularity_weights(self._train_df)
 
@@ -324,7 +328,9 @@ class MovieLensAdapter:
     # Negative sampling
     # ------------------------------------------------------------------
 
-    def _build_popularity_weights(self, train_df: pd.DataFrame) -> dict[int, float]:
+    def _build_popularity_weights(
+        self, train_df: pd.DataFrame
+    ) -> dict[int, float]:
         """Popularity-stratified weights: count(item)^alpha, min count=1."""
         alpha = self.config.neg_sampling_alpha
         counts = (

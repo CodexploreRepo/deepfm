@@ -1,0 +1,97 @@
+{
+  "run_id": "deepfm_movielens",
+  "timestamp": "2026-03-15T11:29:05",
+  "config": {
+    "model_name": "deepfm",
+    "seed": 42,
+    "device": "auto",
+    "output_dir": "outputs/deepfm_movielens",
+    "data": {
+      "dataset_name": "movielens",
+      "data_dir": "data/ml-100k",
+      "split_strategy": "temporal",
+      "temporal_val_ratio": 0.1,
+      "temporal_test_ratio": 0.1,
+      "neg_sampling_alpha": 0.75,
+      "min_interactions": 3,
+      "label_threshold": 4.0,
+      "num_neg_train": 4,
+      "num_neg_eval": 999
+    },
+    "feature": {
+      "fm_embed_dim": 16,
+      "embedding_l2_reg": 1e-05
+    },
+    "fm": {
+      "use_first_order": true,
+      "use_second_order": true
+    },
+    "dnn": {
+      "hidden_units": [
+        256,
+        128,
+        64
+      ],
+      "activation": "relu",
+      "dropout": 0.1,
+      "use_batch_norm": true
+    },
+    "cin": {
+      "layer_sizes": [
+        128,
+        128
+      ],
+      "split_half": true
+    },
+    "attention": {
+      "num_heads": 4,
+      "attention_dim": 64,
+      "num_layers": 1,
+      "use_residual": true
+    },
+    "training": {
+      "num_epochs": 50,
+      "batch_size": 4096,
+      "lr": 0.001,
+      "optimizer": "adam",
+      "scheduler": "reduce_on_plateau",
+      "early_stopping_patience": 5,
+      "metric": "auc",
+      "gradient_clip_norm": 1.0,
+      "ranking_ks": [
+        1,
+        5,
+        10,
+        20
+      ]
+    }
+  },
+  "val_metrics": {
+    "auc": 0.6998396309673623,
+    "logloss": 0.21855629290374162,
+    "HR@1": 0.05714285714285714,
+    "NDCG@1": 0.05714285714285714,
+    "HR@5": 0.07142857142857142,
+    "NDCG@5": 0.06329537940104847,
+    "HR@10": 0.08571428571428572,
+    "NDCG@10": 0.06759580791053392,
+    "HR@20": 0.14285714285714285,
+    "NDCG@20": 0.08261716861498423
+  },
+  "test_metrics": {
+    "auc": 0.624896437894934,
+    "logloss": 0.1998857007365746,
+    "HR@1": 0.017543859649122806,
+    "NDCG@1": 0.017543859649122806,
+    "HR@5": 0.05263157894736842,
+    "NDCG@5": 0.0373847325187975,
+    "HR@10": 0.07017543859649122,
+    "NDCG@10": 0.04266596051290244,
+    "HR@20": 0.08771929824561403,
+    "NDCG@20": 0.0469580752869064
+  },
+  "training_info": {
+    "best_epoch": 16,
+    "total_epochs": 21
+  }
+}

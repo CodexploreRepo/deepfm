@@ -120,6 +120,22 @@ def _print_comparison_table(runs: list[dict]) -> None:
     W_HPARAM = 20
     W_METRIC = 10
 
+    # Collect ranking metric keys from all runs, sorted by type then K value
+    seen: set[str] = set()
+    for run in runs:
+        for key in run.get("test_metrics", {}):
+            if key.startswith("HR@") or key.startswith("NDCG@"):
+                seen.add(key)
+    hr_keys = sorted(
+        (k for k in seen if k.startswith("HR@")),
+        key=lambda x: int(x.split("@")[1]),
+    )
+    ndcg_keys = sorted(
+        (k for k in seen if k.startswith("NDCG@")),
+        key=lambda x: int(x.split("@")[1]),
+    )
+    ranking_keys = hr_keys + ndcg_keys
+
     header = (
         "Run".ljust(W_RUN)
         + "Model".ljust(W_MODEL)
@@ -128,8 +144,7 @@ def _print_comparison_table(runs: list[dict]) -> None:
         + "Val LogL".rjust(W_METRIC)
         + "Tst AUC".rjust(W_METRIC)
         + "Tst LogL".rjust(W_METRIC)
-        + "HR@10".rjust(W_METRIC)
-        + "NDCG@10".rjust(W_METRIC)
+        + "".join(k.rjust(W_METRIC) for k in ranking_keys)
         + "BstEp".rjust(W_METRIC)
     )
     sep = "-" * len(header)
@@ -165,8 +180,7 @@ def _print_comparison_table(runs: list[dict]) -> None:
             + _fmt(vm, "logloss").rjust(W_METRIC)
             + _fmt(tm, "auc").rjust(W_METRIC)
             + _fmt(tm, "logloss").rjust(W_METRIC)
-            + _fmt(tm, "HR@10").rjust(W_METRIC)
-            + _fmt(tm, "NDCG@10").rjust(W_METRIC)
+            + "".join(_fmt(tm, k).rjust(W_METRIC) for k in ranking_keys)
             + str(ti.get("best_epoch", "-")).rjust(W_METRIC)
         )
         print(row)

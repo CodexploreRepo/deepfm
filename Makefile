@@ -1,7 +1,7 @@
 .PHONY: install train evaluate compare test lint format
 
 VENV := .venv
-UV := python3 -m uv
+UV := uv
 PYTHON := $(VENV)/bin/python
 
 ARGS ?=
